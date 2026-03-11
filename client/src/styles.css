@@ -55,7 +55,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 30px 20px 10px;
+  padding: 30px 20px 30px;
   background: #E8F5EE;
 }
 
@@ -68,7 +68,7 @@ body {
 
 
 .back-btn {
-  width: 36px;
+  /* width: 36px;
   height: 36px;
   border: none;
   border-radius: 0;
@@ -78,8 +78,21 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 18px;
-  flex-shrink: 0;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0; */
+  width: 40px;             /* 稍微加大点击区域 */
+  height: 40px;
+  border: none;
+  color: #34493A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 25px;         /* 调整大小 */
+  font-weight: 900;        /* 极粗 */
+  background: transparent; /* 去掉背景 */
+  -webkit-text-stroke: 1px #34493A;
 }
 
 
@@ -106,16 +119,16 @@ body {
 
 
 .app-logo-wrap {
-  width: 40px;
-  height: 40px;
+  width: 60px;
+  height: 60px;
   position: relative;
   flex-shrink: 0;
 }
 
 
 .app-logo {
-  width: 40px;
-  height: 40px;
+  width: 60px;
+  height: 60px;
   object-fit: contain;
   display: block;
 }
@@ -140,7 +153,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px 10px;
+  padding: 26px 20px 10px;
   background: #E8F5EE;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -168,11 +181,16 @@ body {
   background: #E8F5EE;
 }
 
+/* Except home, give each page a little extra top padding so content isn't too close to the header */
+.page:not(.home-page) {
+  padding-top: 18px;
+}
+
 
 .home-hero {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
   margin-bottom: 14px;
   padding: 0 20px;
 }
@@ -182,10 +200,11 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 10px 16px;
   border-radius: 0;
   background: #f5f5f5;
   border: 1px solid var(--border-soft);
+  border-radius: 8px;
 }
 
 
@@ -212,35 +231,23 @@ body {
 }
 
 
-.voice-btn {
-  border: none;
-  border-radius: 0;
-  background: #E8F5EE;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #34493A;
-}
-
 
 .category-tabs {
   display: inline-flex;
   gap: 0;
   background: rgba(255, 255, 255, 0.6);
-  border-radius: 0;
+  border-radius: 8px;
   padding: 2px;
   border: 1px solid var(--border-soft);
+  overflow: hidden;
 }
 
 
 .category-tab {
   border: none;
   padding: 8px 14px;
-  border-radius: 0;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 14px;
   cursor: pointer;
   background: transparent;
   color: #34493A;
@@ -254,6 +261,7 @@ body {
   color: #34493A;
   opacity: 1;
   font-weight: 600;
+  border-radius: 8px;
 }
 
 
@@ -435,7 +443,7 @@ body {
 .outline-btn,
 .solid-btn,
 .primary-btn {
-  border-radius: 0;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
   padding: 8px 14px;
@@ -517,7 +525,7 @@ body {
 
 .post-page .post-card {
   max-width: 100%;
-  margin: 0 20px;
+  margin: 0 10px;
 }
 
 
@@ -530,7 +538,7 @@ body {
 
 .image-upload {
   position: relative;
-  border-radius: 0;
+  border-radius: 8px;
   overflow: hidden;
   background: #E8F5EE;
   border: 1px solid var(--border-soft);
@@ -566,6 +574,7 @@ body {
   width: 100%;
   height: 180px;
   object-fit: cover;
+  border-radius: 8px;
 }
 
 
@@ -578,14 +587,16 @@ body {
   font-size: 14px;
   font-family: 'Inter', sans-serif;
   background: #E8F5EE;
+  border-radius: 8px;
 }
 
 
 .field-label {
   display: block;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 700;
   color: #34493A;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
 
@@ -593,7 +604,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 6px;
+  justify-content: flex-end;
 }
 
 
@@ -606,6 +618,7 @@ body {
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   color: #34493A;
+  border-radius: 8px;
 }
 
 
@@ -635,7 +648,7 @@ body {
 .post-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
 
 
@@ -648,6 +661,7 @@ body {
   font-size: 14px;
   font-family: 'Inter', sans-serif;
   background: #E8F5EE;
+  border-radius: 8px;
 }
 
 
@@ -674,8 +688,10 @@ body {
 
 
 .field-title {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 700;
   color: #34493A;
+  margin-bottom: 5px;
 }
 
 
@@ -711,11 +727,14 @@ body {
 
 
 .submit-btn {
-  margin-top: 14px;
+  margin-top: 22px;
   width: 100%;
-  background: #34493A;
+  background: #3B7254;
   color: #E8F5EE;
+  font-weight: 700;
   padding: 12px;
+  border-radius: 8px;
+  font-size: 16px;
 }
 
 
@@ -1024,9 +1043,16 @@ body {
 .cart-page,
 .favorites-page {
   padding: 0 20px 20px;
+  display: flex;          /* 新增：启用弹性布局 */
+  flex-direction: column; /* 新增：垂直排列 */
 }
 
-
+/* 在下方新增一个规则，专门针对这个危险操作按钮 */
+.favorites-page .outline-btn.danger {
+  /* align-self: flex-end;   新增：让按钮自己靠右 */
+  margin-top: 30px;       /* 新增：与上方卡片的间距，更有呼吸感 */
+  padding: 10px 16px;     /* 稍微加大一点，更好看 */
+}
 .cart-list {
   list-style: none;
   margin: 0;
@@ -1197,10 +1223,11 @@ body {
 
 .map-legend {
   display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: #34493A;
+  gap: 15px;
+  font-size: 15px;
   flex-wrap: wrap;
+  background-color: rgba(255, 255, 255, 0.3) !important; 
+  border-radius: 8px;
 }
 
 
@@ -1214,7 +1241,9 @@ body {
 .legend-dot {
   width: 10px;
   height: 10px;
-  border-radius: 0;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 
@@ -1376,51 +1405,53 @@ body {
 /* src/styles.css - 添加到文件末尾 */
 
 /* 地图标记样式 */
-.item-marker {
-  background-color: #FFD700;
-  border-radius: 50%;
-  border: 2px solid white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+.item-marker,
+.recycle-marker,
+.recycle-tcd-marker {
+  position: relative !important;
+  overflow: visible;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #000;
-  font-size: 20px;
-  font-weight: bold;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 32px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
-.recycle-marker, .recycle-tcd-marker {
-  background-color: #4CAF50;
+.item-marker {
+  background-color: #FFC107;
+  border: 2px solid #FF8F00;
+}
+
+.item-marker::after,
+.recycle-marker::after,
+.recycle-tcd-marker::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 50%;
-  border: 2px solid white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.recycle-marker {
+  background-color: #4CAF50;
+  border: 2px solid rgba(255, 255, 255, 0.7);
 }
 
 .recycle-tcd-marker {
-  background-color: #2E7D32;  /* 更深的绿色区分 TCD 回收点 */
+  background-color: #2E7D32;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
-.recycle-icon-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-size: 16px;
-  color: white;
-  line-height: 1;
-  transform: translateY(-1px); /* 微调垂直居中 */
-}
-
-.recycle-tcd-marker .recycle-icon-inner {
-  font-size: 18px;
-}
-
+/* 你的当前位置标记保持为圆形 */
 .you-marker {
   background-color: #FF4444;
   border-radius: 50%;

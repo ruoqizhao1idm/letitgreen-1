@@ -46,7 +46,7 @@ function TopNav() {
   }
 
   const titles = {
-    "/post": "Plant Jasmeen",
+    "/post": "Create New Listing",
     "/map": "Map",
     "/favorites": "Favorites",
     "/cart": "My Cart"

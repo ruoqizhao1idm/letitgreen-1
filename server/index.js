@@ -67,7 +67,7 @@ let items = [
     title: "Plant Jasmeen",
     description:
       "Healthy indoor plant in a ceramic pot. Looking for a new home in Dublin.",
-    price: 30,
+    price: 10,
     currency: "EUR",
     distanceKm: 0.5,
     location: {
@@ -83,7 +83,7 @@ let items = [
     co2Kg: -2.3,
     postedMinutesAgo: 30,
     imageUrl:
-      "https://images.pexels.com/photos/5699666/pexels-photo-5699666.jpeg?auto=compress&cs=tinysrgb&w=800",
+      "https://imagesvc.meredithcorp.io/v3/mm/image?q=60&c=sc&poi=[1060%2C788]&w=2000&h=1000&url=https:%2F%2Fstatic.onecms.io%2Fwp-content%2Fuploads%2Fsites%2F34%2F2020%2F11%2F23%2Fjasmine-plant-windowsill-getty-1220-2000.jpg",
     tags: ["living", "plant"]
   }
 ];
@@ -240,91 +240,97 @@ app.post("/api/items", async (req, res) => {
   res.status(201).json(newItem);
 });
 
-// Stub: vision / AI
+// Vision / AI image analysis endpoint
 app.post("/api/vision/analyze", async (req, res) => {
   const { image } = req.body;
   console.log("Vision analyze request received", { imageSize: image?.length });
   if (!image) {
     return res.status(400).json({ error: "Image is required" });
   }
-  
+
   try {
     // Step 1: Extract image data and convert to buffer
     let imageBuffer;
+    const imageDataUrl = image.startsWith("data:") ? image : null;
     if (image.startsWith("data:")) {
-      // data:image/jpeg;base64,...
       const base64Data = image.split(",")[1];
       imageBuffer = Buffer.from(base64Data, "base64");
     } else {
       imageBuffer = Buffer.from(image);
     }
-    
+
     console.log("Processing image with local OCR (Tesseract)...");
-    
-    // Step 2: Use Tesseract for text recognition (OCR)
     const result = await Tesseract.recognize(imageBuffer, "eng");
-    const extractedText = result.data.text;
+    const extractedText = (result.data.text || "").trim();
     console.log("Extracted text from image:", extractedText.substring(0, 200));
-    
-    // Step 3: Use DeepSeek to enhance and create product listing from extracted info
-    let productDescription = extractedText.trim();
-    if (productDescription.length < 10) {
-      productDescription = "A product image for Dublin student market";
+
+    // Simple heuristic: if the image is predominantly green, guess it's a plant; if blue, guess electronics.
+    let guessedCategory = null;
+    try {
+      const stats = await sharp(imageBuffer).stats();
+      const [r, g, b] = stats.channels.map((c) => c.mean);
+      if (g > r && g > b) guessedCategory = "plant";
+      else if (b > r && b > g) guessedCategory = "electronics";
+      else if (r > g && r > b) guessedCategory = "clothing";
+      else guessedCategory = "item";
+    } catch (err) {
+      // ignore, heuristic is optional
     }
-    
+
+    // Step 2: Ask the AI to suggest a title/description based on extracted text and color heuristic
+    const mention = guessedCategory ? `The image likely shows a ${guessedCategory}.` : "";
+    const productDescription = extractedText || "No recognizable text was found in the photo.";
+
+    const prompt = `You are helping create a product listing for a second-hand marketplace.\n\n${mention}\n\nHere is text extracted from the photo: \"${productDescription}\"\n\nGenerate a product title (3-5 words) and a 2-3 sentence description that could be used in a listing. Return ONLY valid JSON (no markdown, no code blocks):\n{\n  \"title\": \"...\",\n  \"description\": \"...\"\n}`;
+
     const response = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
-        {
-          role: "user",
-          content: `Based on this information extracted from a product image: "${productDescription}"
-          
-Generate a compelling product listing for a second-hand marketplace in Dublin. Consider:
-- Is it furniture, electronics, books, clothing, or other items?
-- Would it fit in a small student dorm room (typically 10-15 sqm)?
-- What are its key features and selling points?
-
-Return ONLY a valid JSON response (no markdown, no code blocks):
-{
-  "title": "Product title (3-5 words, suitable for small Dublin dorms)",
-  "description": "2-3 sentence product description with size, condition, and suitability for Dublin students"
-}`
-        }
+        { role: "user", content: prompt }
       ],
     });
-    
-    console.log("DeepSeek response:", response.choices[0].message.content.substring(0, 200));
-    const content = response.choices[0].message.content.trim();
-    
+
+    const content = String(response.choices[0]?.message?.content || "").trim();
+    console.log("AI response:", content.substring(0, 200));
+
     let parsed;
     try {
-      // Clean up response - remove markdown code blocks if present
-      let cleanedContent = content;
-      if (cleanedContent.includes("```json")) {
-        cleanedContent = cleanedContent.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      let cleaned = content;
+      if (cleaned.includes("```json")) {
+        cleaned = cleaned.replace(/```json\n?/g, "").replace(/```\n?/g, "");
       }
-      parsed = JSON.parse(cleanedContent);
+      parsed = JSON.parse(cleaned);
     } catch (e) {
-      console.log("Failed to parse JSON response, using fallback");
-      parsed = {
-        title: "Second-hand Product",
-        description: content.substring(0, 200)
-      };
+      console.log("Failed to parse JSON response, using fallback", e.message);
+      // Try to recover JSON-like substring
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch (err) {
+          parsed = null;
+        }
+      }
+      if (!parsed) {
+        parsed = {
+          title: "Second-hand Item",
+          description: content || "A great item for Dublin students"
+        };
+      }
     }
-    
+
     res.json({
       status: "ok",
       suggestion: {
         title: parsed.title || "Second-hand Item",
         description: parsed.description || "A great item for Dublin students"
       },
-      extractedText: extractedText.substring(0, 100) // Debug: show what was extracted
+      extractedText: extractedText.substring(0, 200) // Debug info
     });
-    
   } catch (err) {
-    console.error("Vision analyze failed:", err.message);
-    res.status(500).json({ 
-      error: "AI analysis failed: " + (err.message || "Unknown error") 
+    console.error("Vision analyze failed:", err);
+    res.status(500).json({
+      error: "AI analysis failed: " + (err.message || "Unknown error")
     });
   }
 });
@@ -335,17 +341,41 @@ app.post("/api/ai/enhance", async (req, res) => {
     return res.status(400).json({ error: "Text is required" });
   }
   try {
+    const prompt = `Enhance this product description for a second-hand marketplace. If the input is very short (1-5 words), expand it into a full listing description that includes likely category, condition, and why someone would want it.\n\nInput: "${text}"\n\nReturn JSON (no markdown/code fences): {"enhancedText": "...", "keywords": ["key1", "key2"]}`;
+
     const response = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
         {
           role: "user",
-          content: `Enhance this product description for a second-hand marketplace: "${text}". Also extract key keywords for search. Return in JSON format: {"enhancedText": "...", "keywords": ["key1", "key2"]}`
+          content: prompt
         }
       ],
     });
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
+
+    const raw = String(response.choices[0]?.message?.content || "");
+    let parsed;
+
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      // Try to recover JSON-like substring
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch (err) {
+          parsed = null;
+        }
+      }
+      if (!parsed) {
+        parsed = {
+          enhancedText: raw.trim(),
+          keywords: []
+        };
+      }
+    }
+
     res.json({
       status: "ok",
       enhancedText: parsed.enhancedText || text,

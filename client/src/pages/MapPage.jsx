@@ -16,29 +16,23 @@ const dublinCenter = [53.3438, -6.2546];
 // 黄色标记：卖家发布的商品位置
 const itemIcon = new L.DivIcon({
   className: "item-marker",
-  html: "●",
-  iconSize: [20, 20],
-  iconAnchor: [10, 10]
+  html: "",
+  iconSize: [24, 32],
+  iconAnchor: [12, 32]
 });
-
-// 回收符号 ♻，用绝对定位确保居中
-// src/pages/MapPage.jsx
-
-// 回收符号 ♻，用 flex 居中
-const recycleIconHtml = '<div class="recycle-icon-inner">♻</div>';
 
 const recycleIcon = new L.DivIcon({
   className: "recycle-marker",
-  html: recycleIconHtml,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
+  html: "",
+  iconSize: [24, 32],
+  iconAnchor: [12, 32]
 });
 
 const recycleTcdIcon = new L.DivIcon({
   className: "recycle-tcd-marker",
-  html: recycleIconHtml,
-  iconSize: [26, 26],
-  iconAnchor: [13, 13]
+  html: "",
+  iconSize: [26, 34],
+  iconAnchor: [13, 34]
 });
 
 const yourLocationIcon = new L.DivIcon({
