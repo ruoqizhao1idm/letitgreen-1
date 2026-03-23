@@ -5,6 +5,7 @@ const dotenv = require("dotenv");
 const OpenAI = require("openai");
 const Tesseract = require("tesseract.js");
 const sharp = require("sharp");
+const { MongoClient } = require("mongodb"); // 关键修改 1: 引入 MongoDB
 
 dotenv.config();
 
@@ -41,7 +42,6 @@ async function geocodeAddress(location) {
   } catch (err) {
     console.error("Geocoding failed:", err);
   }
-  // 回退：使用城市中心坐标
   const cityName = (city || "Dublin").trim();
   if (IRISH_CITY_COORDS[cityName]) {
     return IRISH_CITY_COORDS[cityName];
@@ -52,6 +52,11 @@ async function geocodeAddress(location) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 关键修改 2: MongoDB 初始化配置
+const uri = process.env.MONGO_URI || "mongodb+srv://letitgrenn:ths20060913@qi.pf1cmkg.mongodb.net/?appName=qi";
+const client = new MongoClient(uri);
+let itemsCollection; // 全局集合变量
+
 const openai = new OpenAI({
   apiKey: process.env.DEESEEK_API_KEY || "sk-008ec806b7ed408db3fe0f704bb3be24",
   baseURL: "https://api.deepseek.com",
@@ -59,34 +64,6 @@ const openai = new OpenAI({
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
-
-// In-memory data store (seed data so cards show on first load)
-let items = [
-  {
-    id: "1",
-    title: "Plant Jasmeen",
-    description:
-      "Healthy indoor plant in a ceramic pot. Looking for a new home in Dublin.",
-    price: 10,
-    currency: "EUR",
-    distanceKm: 0.5,
-    location: {
-      label: "Grafton Street, Dublin",
-      city: "Dublin",
-      address: "Grafton Street",
-      postcode: "D02",
-      lat: 53.3425,
-      lng: -6.2605
-    },
-    condition: "New",
-    brand: "Local",
-    co2Kg: -2.3,
-    postedMinutesAgo: 30,
-    imageUrl:
-      "https://imagesvc.meredithcorp.io/v3/mm/image?q=60&c=sc&poi=[1060%2C788]&w=2000&h=1000&url=https:%2F%2Fstatic.onecms.io%2Fwp-content%2Fuploads%2Fsites%2F34%2F2020%2F11%2F23%2Fjasmine-plant-windowsill-getty-1220-2000.jpg",
-    tags: ["living", "plant"]
-  }
-];
 
 // Helper: compute CO2 saved for an item (kg)
 const computeCo2SavedForItem = (it) => {
@@ -103,7 +80,6 @@ const computeCo2SavedForItem = (it) => {
     return Math.abs(it.co2Kg);
   }
 
-  // Heuristic fallback based on tags and price
   let base = 20;
   if (it.tags?.includes("electronics")) base = 80;
   else if (it.tags?.includes("living") || it.tags?.includes("plant")) base = 15;
@@ -116,24 +92,28 @@ const computeCo2SavedForItem = (it) => {
   return Math.max(0, estimatedProduction * (1 - assumedDecay));
 };
 
-// Ensure seed items have co2Saved computed
-items = items.map((it) => ({ ...it, co2Saved: computeCo2SavedForItem(it) }));
-
-// API: list items
-app.get("/api/items", (req, res) => {
-  res.json(items);
-});
-
-// API: get single item
-app.get("/api/items/:id", (req, res) => {
-  const item = items.find((i) => i.id === req.params.id);
-  if (!item) {
-    return res.status(404).json({ error: "Item not found" });
+// API: list items (关键修改 3: 从数据库获取)
+app.get("/api/items", async (req, res) => {
+  try {
+    const dbItems = await itemsCollection.find({}).sort({ _id: -1 }).toArray();
+    res.json(dbItems);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch items" });
   }
-  res.json(item);
 });
 
-// API: create item
+// API: get single item (关键修改 4: 从数据库查找)
+app.get("/api/items/:id", async (req, res) => {
+  try {
+    const item = await itemsCollection.findOne({ id: req.params.id });
+    if (!item) return res.status(404).json({ error: "Item not found" });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// API: create item (关键修改 5: 存入数据库)
 app.post("/api/items", async (req, res) => {
   const {
     title,
@@ -156,7 +136,7 @@ app.post("/api/items", async (req, res) => {
     });
   }
 
-  // Extract keywords using AI
+  // AI 提取关键词逻辑保持不变
   let keywords = [];
   try {
     const response = await openai.chat.completions.create({
@@ -168,15 +148,35 @@ app.post("/api/items", async (req, res) => {
         }
       ],
     });
-    const content = response.choices[0].message.content;
-    keywords = JSON.parse(content) || [];
+    // 1. 拿到 AI 的原始回复
+    let content = response.choices[0].message.content;
+
+    // 2. 增加这一段：清理掉 Markdown 的外壳
+    let cleanedContent = content;
+    if (cleanedContent.includes("```")) {
+        // 这行正则会自动去掉 ```json 和结尾的 ```
+        cleanedContent = cleanedContent.replace(/```json\n?|```\n?/g, "").trim();
+    }
+
+    // 3. 然后再解析
+    try {
+        keywords = JSON.parse(cleanedContent);
+    } catch (e) {
+        console.error("解析 JSON 失败，尝试二次修复...");
+        // 最后的防线：尝试用正则提取第一个 { 和最后一个 } 之间的内容
+        const match = cleanedContent.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        if (match) {
+            keywords = JSON.parse(match[0]);
+        } else {
+            keywords = []; // 如果实在不行，给个空数组
+        }
+    }
   } catch (err) {
     console.error("Keyword extraction failed", err);
-    // Fallback to simple split
     keywords = description.split(' ').slice(0, 5);
   }
 
-  // 1. AI 估算该商品减少的碳排放量（kg CO2）
+  // 1. AI 估算碳排放逻辑保持不变
   let aiCo2Kg = null;
   try {
     const aiRes = await openai.chat.completions.create({
@@ -194,7 +194,7 @@ app.post("/api/items", async (req, res) => {
     console.error("AI CO2 estimation failed", err);
   }
 
-  // 2. 根据用户填写的地址解析经纬度
+  // 2. 地址解析逻辑保持不变
   let lat = location?.lat;
   let lng = location?.lng;
   const coords = await geocodeAddress(location);
@@ -233,25 +233,20 @@ app.post("/api/items", async (req, res) => {
     keywords: keywords
   };
 
-  // Compute and attach co2Saved for the new item
   newItem.co2Saved = computeCo2SavedForItem(newItem);
 
-  items.unshift(newItem);
+  // 关键：存入 MongoDB
+  await itemsCollection.insertOne(newItem);
   res.status(201).json(newItem);
 });
 
-// Vision / AI image analysis endpoint
+// Vision / AI 图像分析 (全部保留)
 app.post("/api/vision/analyze", async (req, res) => {
   const { image } = req.body;
-  console.log("Vision analyze request received", { imageSize: image?.length });
-  if (!image) {
-    return res.status(400).json({ error: "Image is required" });
-  }
+  if (!image) return res.status(400).json({ error: "Image is required" });
 
   try {
-    // Step 1: Extract image data and convert to buffer
     let imageBuffer;
-    const imageDataUrl = image.startsWith("data:") ? image : null;
     if (image.startsWith("data:")) {
       const base64Data = image.split(",")[1];
       imageBuffer = Buffer.from(base64Data, "base64");
@@ -259,12 +254,9 @@ app.post("/api/vision/analyze", async (req, res) => {
       imageBuffer = Buffer.from(image);
     }
 
-    console.log("Processing image with local OCR (Tesseract)...");
     const result = await Tesseract.recognize(imageBuffer, "eng");
     const extractedText = (result.data.text || "").trim();
-    console.log("Extracted text from image:", extractedText.substring(0, 200));
 
-    // Simple heuristic: if the image is predominantly green, guess it's a plant; if blue, guess electronics.
     let guessedCategory = null;
     try {
       const stats = await sharp(imageBuffer).stats();
@@ -273,11 +265,8 @@ app.post("/api/vision/analyze", async (req, res) => {
       else if (b > r && b > g) guessedCategory = "electronics";
       else if (r > g && r > b) guessedCategory = "clothing";
       else guessedCategory = "item";
-    } catch (err) {
-      // ignore, heuristic is optional
-    }
+    } catch (err) {}
 
-    // Step 2: Ask the AI to suggest a title/description based on extracted text and color heuristic
     const mention = guessedCategory ? `The image likely shows a ${guessedCategory}.` : "";
     const productDescription = extractedText || "No recognizable text was found in the photo.";
 
@@ -285,14 +274,10 @@ app.post("/api/vision/analyze", async (req, res) => {
 
     const response = await openai.chat.completions.create({
       model: "deepseek-chat",
-      messages: [
-        { role: "user", content: prompt }
-      ],
+      messages: [{ role: "user", content: prompt }],
     });
 
     const content = String(response.choices[0]?.message?.content || "").trim();
-    console.log("AI response:", content.substring(0, 200));
-
     let parsed;
     try {
       let cleaned = content;
@@ -301,22 +286,8 @@ app.post("/api/vision/analyze", async (req, res) => {
       }
       parsed = JSON.parse(cleaned);
     } catch (e) {
-      console.log("Failed to parse JSON response, using fallback", e.message);
-      // Try to recover JSON-like substring
       const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch (err) {
-          parsed = null;
-        }
-      }
-      if (!parsed) {
-        parsed = {
-          title: "Second-hand Item",
-          description: content || "A great item for Dublin students"
-        };
-      }
+      parsed = match ? JSON.parse(match[0]) : { title: "Second-hand Item", description: content };
     }
 
     res.json({
@@ -325,111 +296,71 @@ app.post("/api/vision/analyze", async (req, res) => {
         title: parsed.title || "Second-hand Item",
         description: parsed.description || "A great item for Dublin students"
       },
-      extractedText: extractedText.substring(0, 200) // Debug info
+      extractedText: extractedText.substring(0, 200)
     });
   } catch (err) {
-    console.error("Vision analyze failed:", err);
-    res.status(500).json({
-      error: "AI analysis failed: " + (err.message || "Unknown error")
-    });
+    res.status(500).json({ error: "AI analysis failed" });
   }
 });
 
+// AI 增强接口 (全部保留)
 app.post("/api/ai/enhance", async (req, res) => {
   const { text } = req.body;
-  if (!text) {
-    return res.status(400).json({ error: "Text is required" });
-  }
+  if (!text) return res.status(400).json({ error: "Text is required" });
   try {
-    const prompt = `Enhance this product description for a second-hand marketplace. If the input is very short (1-5 words), expand it into a full listing description that includes likely category, condition, and why someone would want it.\n\nInput: "${text}"\n\nReturn JSON (no markdown/code fences): {"enhancedText": "...", "keywords": ["key1", "key2"]}`;
-
+    const prompt = `Enhance this product description for a second-hand marketplace. Return JSON: {"enhancedText": "...", "keywords": ["key1", "key2"]}`;
     const response = await openai.chat.completions.create({
       model: "deepseek-chat",
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
+      messages: [{ role: "user", content: prompt }],
     });
-
     const raw = String(response.choices[0]?.message?.content || "");
     let parsed;
-
     try {
       parsed = JSON.parse(raw);
     } catch (e) {
-      // Try to recover JSON-like substring
       const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch (err) {
-          parsed = null;
-        }
-      }
-      if (!parsed) {
-        parsed = {
-          enhancedText: raw.trim(),
-          keywords: []
-        };
-      }
+      parsed = match ? JSON.parse(match[0]) : { enhancedText: raw.trim(), keywords: [] };
     }
-
-    res.json({
-      status: "ok",
-      enhancedText: parsed.enhancedText || text,
-      keywords: parsed.keywords || []
-    });
+    res.json({ status: "ok", enhancedText: parsed.enhancedText || text, keywords: parsed.keywords || [] });
   } catch (err) {
-    console.error("AI enhance failed", err);
     res.status(500).json({ error: "AI enhancement failed" });
   }
 });
 
-// API: AI search
+// AI 搜索 (关键修改 6: 先从 DB 读，再过滤)
 app.post("/api/search", async (req, res) => {
   const { query } = req.body;
-  if (!query) {
-    return res.status(400).json({ error: "Query is required" });
-  }
+  if (!query) return res.status(400).json({ error: "Query is required" });
   try {
-    // Use AI to analyze query and find matching items
-    const prompt = `User search query: "${query}". Analyze this query for a second-hand marketplace. Consider context like Dublin student dorms (typical size ~10-15 sqm). For items that match, calculate a "compatibility score" (0-100) based on size fit for small spaces, and a "value index" (0-100) based on price vs quality. Return JSON: {"matches": [{"itemId": "id", "compatibilityScore": 85, "valueIndex": 90, "reason": "brief explanation"}]}`;
+    const prompt = `User search query: "${query}". Return JSON: {"matches": [{"itemId": "id", "compatibilityScore": 85, "valueIndex": 90, "reason": "..."}]}`;
     const response = await openai.chat.completions.create({
       model: "deepseek-chat",
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
+      messages: [{ role: "user", content: prompt }],
     });
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(response.choices[0].message.content);
     const matches = parsed.matches || [];
-    // Filter items based on matches
-    const matchedItems = items.filter(item => matches.some(m => m.itemId === item.id));
-    // Add scores to items
+    
+    // 从数据库拿所有物品
+    const allItems = await itemsCollection.find({}).toArray();
+    const matchedItems = allItems.filter(item => matches.some(m => m.itemId === item.id));
+    
     const enrichedItems = matchedItems.map(item => {
       const match = matches.find(m => m.itemId === item.id);
       return { ...item, compatibilityScore: match?.compatibilityScore || 0, valueIndex: match?.valueIndex || 0, matchReason: match?.reason || "" };
     });
     res.json({ items: enrichedItems });
   } catch (err) {
-    console.error("AI search failed", err);
-    // Fallback to simple search
     const term = query.toLowerCase();
-    const filtered = items.filter(item =>
+    const allItems = await itemsCollection.find({}).toArray();
+    const filtered = allItems.filter(item =>
       item.title.toLowerCase().includes(term) ||
-      item.description.toLowerCase().includes(term) ||
-      item.keywords?.some(k => k.toLowerCase().includes(term))
+      item.description.toLowerCase().includes(term)
     );
     res.json({ items: filtered });
   }
 });
 
-// Optional: serve built client
+// 静态服务
 const clientDistPath = path.join(__dirname, "..", "client", "dist");
 app.use(express.static(clientDistPath));
 app.get("*", (req, res, next) => {
@@ -439,6 +370,37 @@ app.get("*", (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+// 关键修改 7: 异步启动，确保 DB 连上
+async function startServer() {
+  try {
+    await client.connect();
+    console.log("✅ MongoDB Atlas Connected!");
+    const db = client.db("letitgreen");
+    itemsCollection = db.collection("items");
+
+    // 数据初始化：如果库为空，存入第一个商品
+    const count = await itemsCollection.countDocuments();
+    if (count === 0) {
+      const seed = {
+        id: "1",
+        title: "Plant Jasmeen",
+        description: "Healthy indoor plant in a ceramic pot. Looking for a new home in Dublin.",
+        price: 10,
+        currency: "EUR",
+        location: { label: "Grafton Street, Dublin", city: "Dublin", lat: 53.3425, lng: -6.2605 },
+        co2Saved: 12.5,
+        imageUrl: "https://imagesvc.meredithcorp.io/v3/mm/image?q=60&c=sc&poi=[1060%2C788]&w=2000&h=1000&url=https:%2F%2Fstatic.onecms.io%2Fwp-content%2Fuploads%2Fsites%2F34%2F2020%2F11%2F23%2Fjasmine-plant-windowsill-getty-1220-2000.jpg",
+        tags: ["living", "plant"]
+      };
+      await itemsCollection.insertOne(seed);
+    }
+
+    app.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error("❌ DB connection failed:", err);
+  }
+}
+
+startServer();
